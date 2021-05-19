@@ -33,10 +33,10 @@ std::size_t processRle(std::shared_ptr<graphite::rsrc::resource> resource, bool 
     int trim = 0;
     // Figure out how many lines can be trimmed from top/bottom of the whole sprite
     if (resize) {
-        trim = height;
+        trim = height/2;
         for (int i=0; i<frames; i++) {
-            bool start = true;
-            int top = 0;
+            int line = 0;
+            int top = height;
             int bottom = 0;
             while (true) {
                 op = reader.read_long();
@@ -45,13 +45,12 @@ std::size_t processRle(std::shared_ptr<graphite::rsrc::resource> resource, bool 
                     count = op & 0x00FFFFFF;
                     if (count != 0) {
                         reader.move(count);
-                        start = false;
-                        bottom = 0;
-                    } else if (start) {
-                        top++;
-                    } else {
-                        bottom++;
+                        if (top > line) {
+                            top = line;
+                        }
+                        bottom = line+1;
                     }
+                    line++;
                 } else {
                     break;
                 }
@@ -59,6 +58,7 @@ std::size_t processRle(std::shared_ptr<graphite::rsrc::resource> resource, bool 
             if (top < trim) {
                 trim = top;
             }
+            bottom = height-bottom;
             if (bottom < trim) {
                 trim = bottom;
             }
