@@ -6,12 +6,12 @@
 //
 
 #include <iostream>
+#include <filesystem>
 #include "libGraphite/data/reader.hpp"
 #include "libGraphite/data/writer.hpp"
 #include "libGraphite/rsrc/file.hpp"
 
-enum rleop : uint8_t
-{
+enum rleop: uint8_t {
     eof = 0x00,
     line_start = 0x01,
     pixel_data = 0x02,
@@ -19,7 +19,7 @@ enum rleop : uint8_t
     pixel_run = 0x04,
 };
 
-bool processRle(std::shared_ptr<graphite::rsrc::resource> resource, bool resize) {
+std::size_t processRle(std::shared_ptr<graphite::rsrc::resource> resource, bool resize) {
     auto reader = graphite::data::reader(resource->data());
     auto width = reader.read_short();
     auto height = reader.read_short();
@@ -100,33 +100,34 @@ bool processRle(std::shared_ptr<graphite::rsrc::resource> resource, bool resize)
     
     auto diff = resource->data()->size() - writer.data()->size();
     if (diff <= 0) {
-        return false;
+        return 0;
     }
-    std::cout << resource->id() << ": saved " << diff << std::endl;
     resource->set_data(writer.data());
-    return true;
+    return diff;
 }
 
 bool processFile(const char * path, bool resize) {
+    auto filename = std::filesystem::path(path).filename();
     graphite::rsrc::file file;
     try {
         file = graphite::rsrc::file(path);
     } catch (const std::exception& e) {
-        std::cerr << e.what() << std::endl;
+        std::cerr << filename << ": " << e.what() << std::endl;
         return false;
     }
-    std::cout << path << std::endl;
-    bool altered = false;
+    std::cout << "Processing " << filename << "..." << std::endl;
+    std::size_t saved = 0;
+    std::size_t count = 0;
     for (auto typeList : file.types()) {
         if (typeList->code() == "rlëD") {
+            count = typeList->count();
             for (auto resource : typeList->resources()) {
-                if (processRle(resource, resize)) {
-                    altered = true;
-                }
+                saved += processRle(resource, resize);
             }
         }
     }
-    if (!altered) {
+    std::cout << "Saved " << saved << " bytes from " << count << " resources." << std::endl;
+    if (saved <= 0) {
         return false;
     }
     file.write(path, file.current_format());
@@ -134,9 +135,15 @@ bool processFile(const char * path, bool resize) {
 }
 
 int main(int argc, const char * argv[]) {
+    if (argc < 2) {
+        std::cerr << "Optimize the size of rlëD resources in resource files." << std::endl;
+        std::cerr << "Usage: rleduce [-f] file ..." << std::endl;
+        std::cerr << "  -f  allow frame resizing for greater optimization" << std::endl;
+        return 1;
+    }
     bool resize = false;
     for (int i=1; i<argc; i++) {
-        if (strcmp(argv[i], "-r") == 0) {
+        if (strcmp(argv[i], "-f") == 0) {
             resize = true;
         } else {
             processFile(argv[i], resize);
