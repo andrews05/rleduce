@@ -7,6 +7,14 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		4939F78C27A8942600092521 /* geometry.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 495FE7E9265477BE001D61E3 /* geometry.cpp */; };
+		4939F78E27A8943100092521 /* surface.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 495FE7F3265477BE001D61E3 /* surface.cpp */; };
+		4939F79027A8943400092521 /* color.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 495FE7F0265477BE001D61E3 /* color.cpp */; };
+		4939F79227A8944E00092521 /* manager.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 495FE80F265477BE001D61E3 /* manager.cpp */; };
+		4939F79427A8B38F00092521 /* clut.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 495FE7EA265477BE001D61E3 /* clut.cpp */; };
+		4939F79627A8D79D00092521 /* pict.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 495FE7F4265477BE001D61E3 /* pict.cpp */; };
+		4939F79827A8D7A100092521 /* pixmap.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 495FE7F6265477BE001D61E3 /* pixmap.cpp */; };
+		4939F79A27A8D7AE00092521 /* packbits.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 495FE7F1265477BE001D61E3 /* packbits.cpp */; };
 		495FE7DC26547764001D61E3 /* main.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 495FE7DB26547764001D61E3 /* main.cpp */; };
 		495FE829265477F2001D61E3 /* data.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 495FE81A265477BE001D61E3 /* data.cpp */; };
 		495FE82B265477F4001D61E3 /* reader.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 495FE81B265477BE001D61E3 /* reader.cpp */; };
@@ -18,6 +26,7 @@
 		495FE83926547808001D61E3 /* rez.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 495FE813265477BE001D61E3 /* rez.cpp */; };
 		495FE83B2654780A001D61E3 /* type.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 495FE814265477BE001D61E3 /* type.cpp */; };
 		495FE83E26547908001D61E3 /* macroman.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 495FE807265477BE001D61E3 /* macroman.cpp */; };
+		49B2652D27B9C6CF0047E24D /* rle.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 495FE7F7265477BE001D61E3 /* rle.cpp */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -154,21 +163,21 @@
 		495FE7E8265477BE001D61E3 /* quickdraw */ = {
 			isa = PBXGroup;
 			children = (
-				495FE7E9265477BE001D61E3 /* geometry.cpp */,
-				495FE7EA265477BE001D61E3 /* clut.cpp */,
-				495FE7EB265477BE001D61E3 /* rle.hpp */,
 				495FE7EC265477BE001D61E3 /* cicn.cpp */,
+				495FE7F8265477BE001D61E3 /* cicn.hpp */,
+				495FE7EA265477BE001D61E3 /* clut.cpp */,
+				495FE7FD265477BE001D61E3 /* clut.hpp */,
+				495FE7E9265477BE001D61E3 /* geometry.cpp */,
+				495FE7FC265477BE001D61E3 /* geometry.hpp */,
 				495FE7ED265477BE001D61E3 /* internal */,
 				495FE7F4265477BE001D61E3 /* pict.cpp */,
-				495FE7F5265477BE001D61E3 /* ppat.hpp */,
-				495FE7F6265477BE001D61E3 /* pixmap.cpp */,
-				495FE7F7265477BE001D61E3 /* rle.cpp */,
-				495FE7F8265477BE001D61E3 /* cicn.hpp */,
 				495FE7F9265477BE001D61E3 /* pict.hpp */,
-				495FE7FA265477BE001D61E3 /* ppat.cpp */,
+				495FE7F6265477BE001D61E3 /* pixmap.cpp */,
 				495FE7FB265477BE001D61E3 /* pixmap.hpp */,
-				495FE7FC265477BE001D61E3 /* geometry.hpp */,
-				495FE7FD265477BE001D61E3 /* clut.hpp */,
+				495FE7FA265477BE001D61E3 /* ppat.cpp */,
+				495FE7F5265477BE001D61E3 /* ppat.hpp */,
+				495FE7F7265477BE001D61E3 /* rle.cpp */,
+				495FE7EB265477BE001D61E3 /* rle.hpp */,
 			);
 			path = quickdraw;
 			sourceTree = "<group>";
@@ -176,12 +185,12 @@
 		495FE7ED265477BE001D61E3 /* internal */ = {
 			isa = PBXGroup;
 			children = (
-				495FE7EE265477BE001D61E3 /* surface.hpp */,
-				495FE7EF265477BE001D61E3 /* packbits.hpp */,
 				495FE7F0265477BE001D61E3 /* color.cpp */,
-				495FE7F1265477BE001D61E3 /* packbits.cpp */,
 				495FE7F2265477BE001D61E3 /* color.hpp */,
+				495FE7F1265477BE001D61E3 /* packbits.cpp */,
+				495FE7EF265477BE001D61E3 /* packbits.hpp */,
 				495FE7F3265477BE001D61E3 /* surface.cpp */,
+				495FE7EE265477BE001D61E3 /* surface.hpp */,
 			);
 			path = internal;
 			sourceTree = "<group>";
@@ -312,15 +321,24 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				4939F79027A8943400092521 /* color.cpp in Sources */,
 				495FE831265477FE001D61E3 /* extended.cpp in Sources */,
 				495FE83526547803001D61E3 /* file.cpp in Sources */,
+				49B2652D27B9C6CF0047E24D /* rle.cpp in Sources */,
 				495FE82D265477F6001D61E3 /* writer.cpp in Sources */,
+				4939F79827A8D7A100092521 /* pixmap.cpp in Sources */,
 				495FE82F265477FC001D61E3 /* resource.cpp in Sources */,
+				4939F78C27A8942600092521 /* geometry.cpp in Sources */,
+				4939F79227A8944E00092521 /* manager.cpp in Sources */,
 				495FE83926547808001D61E3 /* rez.cpp in Sources */,
 				495FE7DC26547764001D61E3 /* main.cpp in Sources */,
 				495FE83726547805001D61E3 /* classic.cpp in Sources */,
+				4939F79627A8D79D00092521 /* pict.cpp in Sources */,
 				495FE82B265477F4001D61E3 /* reader.cpp in Sources */,
+				4939F79A27A8D7AE00092521 /* packbits.cpp in Sources */,
+				4939F79427A8B38F00092521 /* clut.cpp in Sources */,
 				495FE829265477F2001D61E3 /* data.cpp in Sources */,
+				4939F78E27A8943100092521 /* surface.cpp in Sources */,
 				495FE83B2654780A001D61E3 /* type.cpp in Sources */,
 				495FE83E26547908001D61E3 /* macroman.cpp in Sources */,
 			);
