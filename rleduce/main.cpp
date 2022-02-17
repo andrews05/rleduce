@@ -17,7 +17,7 @@ using namespace graphite;
 static struct options {
     bool trim = false;
     bool reduce = false;
-    bool create = false;
+    bool encode = false;
     bool dither = true;
     bool verbose = false;
 } options;
@@ -78,7 +78,8 @@ int64_t processRle(std::shared_ptr<rsrc::resource> resource) {
     
     auto writer = data::writer();
     writer.write_short(width);
-    writer.write_short(height - (trim * 2));
+    auto newHeight = height - (trim * 2);
+    writer.write_short(newHeight);
     reader.set_position(4);
     writer.write_data(reader.read_data(12));
     for (int i=0; i<frames; i++) {
@@ -109,12 +110,20 @@ int64_t processRle(std::shared_ptr<rsrc::resource> resource) {
         }
     }
     
-    auto diff = resource->data()->size() - writer.data()->size();
-    if (diff <= 0) {
-        return 0;
+    auto size = resource->data()->size();
+    auto data = writer.data();
+    auto diff = size - data->size();
+    if (options.verbose) {
+        double pc = diff * 100.0 / size;
+        std::string result = diff > 0 ? "Written" : "Not written";
+        printf("%7lld  %6d  %6d  %8ld  %10d  %8ld  %5.1f%%  %s\n",
+               resource->id(), frames, height, size, newHeight, data->size(), pc, result.c_str());
     }
-    resource->set_data(writer.data());
-    return diff;
+    if (diff > 0) {
+        resource->set_data(data);
+        return diff;
+    }
+    return 0;
 }
 
 void applyError(std::shared_ptr<qd::surface> surface, int x, int y, int errors[3], bool up) {
@@ -144,6 +153,7 @@ void rgb555dither(std::shared_ptr<qd::surface> surface) {
                 color.blue_component() - newColor.blue_component()
             };
             if (errors[0] || errors[1] || errors[2]) {
+                surface->set(x, y, newColor);
                 if (even && x+1 < frameWidth) {
                     applyError(surface, x+1, y, errors, false);
                 } else if (!even && x > 0) {
@@ -157,22 +167,43 @@ void rgb555dither(std::shared_ptr<qd::surface> surface) {
     }
 }
 
-int64_t processPict(std::shared_ptr<rsrc::resource> resource) {
-    qd::pict pict(resource->data());
-    if (options.reduce && options.dither) {
-        rgb555dither(pict.image_surface().lock());
-    }
-    auto data = pict.data(options.reduce);
-    auto diff = resource->data()->size() - data->size();
-    // Force write if format is non-standard (QuickTime)
-    if (diff <= 0 && pict.format() <= 32) {
-        return 0;
-    }
-    resource->set_data(data);
-    return diff;
+std::string fourCC(uint32_t code) {
+    std::string str;
+    str.push_back(code >> 24);
+    str.push_back(code >> 16);
+    str.push_back(code >> 8);
+    str.push_back(code);
+    return str;
 }
 
-bool processSpin(std::shared_ptr<rsrc::resource> resource, rsrc::file file) {
+int64_t processPict(std::shared_ptr<rsrc::resource> resource) {
+    qd::pict pict(resource->data());
+    auto format = pict.format();
+    // Don't dither low depth images
+    if (options.reduce && options.dither && format > 4 && format != 16) {
+        rgb555dither(pict.image_surface().lock());
+    }
+    auto size = resource->data()->size();
+    auto data = pict.data(options.reduce || format == 16);
+    int64_t diff = size - data->size();
+    // Force write if format is non-standard (QuickTime) or reduction occurred
+    bool save = diff > 0 || format > 32 || (options.reduce && format != 16);
+    if (options.verbose) {
+        std::string inFormat = format > 32 ? fourCC(format) : std::to_string(format)+"-bit";
+        std::string outFormat = pict.format() > 32 ? fourCC(pict.format()) : std::to_string(pict.format())+"-bit";
+        double pc = diff * 100.0 / size;
+        std::string result = save ? (diff > 0 ? "Written" : "Written (forced)") : "Not written";
+        printf("%7lld  %-6s  %8ld  %-8s  %8ld  %5.1f%%  %s\n",
+               resource->id(), inFormat.c_str(), size, outFormat.c_str(), data->size(), pc, result.c_str());
+    }
+    if (save) {
+        resource->set_data(data);
+        return diff;
+    }
+    return 0;
+}
+
+bool processSpin(std::shared_ptr<rsrc::resource> resource, rsrc::file& file) {
     auto reader = data::reader(resource->data());
     auto spriteID = reader.read_short();
     auto maskID = reader.read_short();
@@ -205,7 +236,7 @@ bool processSpin(std::shared_ptr<rsrc::resource> resource, rsrc::file file) {
     }
     
     auto rle = qd::rle(qd::size(frameX, frameY), gridX * gridY);
-    if (options.dither) {
+    if (options.dither && spritePict.format() != 16) {
         rgb555dither(sprite);
     }
     for (int gy=0; gy<gridY; gy++) {
@@ -223,8 +254,62 @@ bool processSpin(std::shared_ptr<rsrc::resource> resource, rsrc::file file) {
         }
     }
     
-    file.add_resource("rlëD", spriteID, resource->name(), rle.data());
+    auto data = rle.data();
+    if (options.verbose) {
+        auto sSize = spriteRes->data()->size();
+        auto mSize = maskRes->data()->size();
+        printf("%7lld  %7d  %6d  %6d  %6d  %11ld  %9ld  %9ld\n",
+               resource->id(), spriteID, rle.frame_count(), frameX, frameY, sSize, mSize, data->size());
+    }
+    file.add_resource("rlëD", spriteID, resource->name(), data);
+    // TODO: Remove PICTs - no such function currently available
     return true;
+}
+
+bool processType(rsrc::file& file, std::string typeCode) {
+    auto typeList = file.type_container(typeCode).lock();
+    if (typeList->count() == 0) {
+        return false;
+    }
+    int64_t saved = 0;
+    if (typeCode == "rlëD") {
+        if (options.verbose) {
+            printf("rlëD ID  Frames  Height      Size  New Height  New Size   Saved  Action\n");
+        }
+        for (auto resource : typeList->resources()) {
+            try {
+                saved += processRle(resource);
+            } catch (const std::exception& e) {
+                std::cerr << e.what() << std::endl;
+            }
+        }
+        std::cout << "Saved " << saved << " bytes from " << typeList->count() << " rlëDs." << std::endl;
+    } else if (typeCode == "PICT") {
+        if (options.verbose) {
+            printf("PICT ID  Type        Size  New Type  New Size   Saved  Action\n");
+        }
+        for (auto resource : typeList->resources()) {
+            try {
+                saved += processPict(resource);
+            } catch (const std::exception& e) {
+                std::cerr << e.what() << std::endl;
+            }
+        }
+        std::cout << "Saved " << saved << " bytes from " << typeList->count() << " PICTs." << std::endl;
+    } else if (typeCode == "spïn") {
+        if (options.verbose) {
+            printf("spïn ID  rlëD ID  Frames   Width  Height  Sprite Size  Mask Size  rlëD Size\n");
+        }
+        for (auto resource : typeList->resources()) {
+            try {
+                saved += processSpin(resource, file);
+            } catch (const std::exception& e) {
+                std::cerr << e.what() << std::endl;
+            }
+        }
+        std::cout << "Encoded " << saved << " rlëDs from " << typeList->count() << " spïns." << std::endl;
+    }
+    return saved != 0;
 }
 
 bool processFile(std::filesystem::path path, std::filesystem::path outpath) {
@@ -236,42 +321,24 @@ bool processFile(std::filesystem::path path, std::filesystem::path outpath) {
         std::cerr << filename << ": " << e.what() << std::endl;
         return false;
     }
+    
     std::cout << "Processing " << filename << "..." << std::endl;
-    bool writeFile = false;
-    for (auto typeList : file.types()) {
-        int64_t saved = 0;
-        if (typeList->code() == "rlëD") {
-            for (auto resource : typeList->resources()) {
-                saved += processRle(resource);
-            }
-            std::cout << "Saved " << saved << " bytes from " << typeList->count() << " rlëDs." << std::endl;
-        } else if (typeList->code() == "PICT") {
-            for (auto resource : typeList->resources()) {
-                try {
-                    saved += processPict(resource);
-                } catch (const std::exception& e) {
-                    std::cerr << e.what() << std::endl;
-                }
-            }
-            std::cout << "Saved " << saved << " bytes from " << typeList->count() << " PICTs." << std::endl;
-        } else if (typeList->code() == "spïn" && options.create) {
-            for (auto resource : typeList->resources()) {
-                try {
-                    saved += processSpin(resource, file);
-                } catch (const std::exception& e) {
-                    std::cerr << e.what() << std::endl;
-                }
-            }
-            std::cout << "Created " << saved << " rlëDs from " << typeList->count() << " spïns." << std::endl;
-        }
-        if (saved) {
-            writeFile = true;
-        }
+    // Don't rewrite file if nothing changed and outpath not provided
+    bool writeFile = !outpath.empty();
+    // If trim is on, process spins before rleDs so they can be trimmed later, otherwise process them after
+    if (options.encode && options.trim) {
+        writeFile += processType(file, "spïn");
     }
+    writeFile |= processType(file, "rlëD");
+    if (options.encode && !options.trim) {
+        writeFile |= processType(file, "spïn");
+    }
+    writeFile |= processType(file, "PICT");
     if (!writeFile) {
         std::cout << "No changes written." << std::endl;
         return false;
     }
+    
     auto format = file.current_format();
     if (outpath.empty()) {
         outpath = path;
@@ -289,10 +356,10 @@ bool processFile(std::filesystem::path path, std::filesystem::path outpath) {
 
 void printUsage() {
     std::cerr << "Usage: rleduce [options] file ..." << std::endl;
-    std::cerr << "  -t --trim           allow rlëD frame trimming (smaller output)" << std::endl;
+    std::cerr << "  -t --trim           allow rlëD frame height trimming (marginally smaller output)" << std::endl;
     std::cerr << "  -r --reduce         reduce PICT depth to 16-bit (smaller output)" << std::endl;
-    std::cerr << "  -c --create         create rlëDs from spïns with PICTs" << std::endl;
-    std::cerr << "  -n --no-dither      don't dither when reducing to 16-bit" << std::endl;
+    std::cerr << "  -e --encode         encode rlëDs from spïns with PICTs" << std::endl;
+    std::cerr << "  -n --no-dither      don't dither when reducing to 16-bit (applies to -r and -e)" << std::endl;
     std::cerr << "  -o --output <path>  set output file/directory" << std::endl;
     std::cerr << "  -v --verbose        enable verbose output" << std::endl;
 }
@@ -302,8 +369,8 @@ void processOption(std::string arg) {
         options.trim = true;
     } else if (arg == "r" || arg == "--reduce") {
         options.reduce = true;
-    } else if (arg == "c" || arg == "--create") {
-        options.create = true;
+    } else if (arg == "e" || arg == "--encode") {
+        options.encode = true;
     } else if (arg == "n" || arg == "--no-dither") {
         options.dither = false;
     } else if (arg == "v" || arg == "--verbose") {
