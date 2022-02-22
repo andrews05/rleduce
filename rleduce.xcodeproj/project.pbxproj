@@ -112,7 +112,7 @@
 		495FE7CF26547764001D61E3 = {
 			isa = PBXGroup;
 			children = (
-				495FE7DA26547764001D61E3 /* rleduce */,
+				495FE7DA26547764001D61E3 /* src */,
 				495FE7E3265477BE001D61E3 /* Graphite */,
 				495FE7D926547764001D61E3 /* Products */,
 			);
@@ -126,12 +126,12 @@
 			name = Products;
 			sourceTree = "<group>";
 		};
-		495FE7DA26547764001D61E3 /* rleduce */ = {
+		495FE7DA26547764001D61E3 /* src */ = {
 			isa = PBXGroup;
 			children = (
 				495FE7DB26547764001D61E3 /* main.cpp */,
 			);
-			path = rleduce;
+			path = src;
 			sourceTree = "<group>";
 		};
 		495FE7E3265477BE001D61E3 /* Graphite */ = {

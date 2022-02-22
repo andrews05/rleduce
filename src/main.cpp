@@ -316,7 +316,7 @@ bool processFile(std::filesystem::path path, std::filesystem::path outpath) {
     auto filename = path.filename();
     rsrc::file file;
     try {
-        file = rsrc::file(path);
+        file = rsrc::file(path.generic_string());
     } catch (const std::exception& e) {
         std::cerr << filename << ": " << e.what() << std::endl;
         return false;
@@ -327,7 +327,7 @@ bool processFile(std::filesystem::path path, std::filesystem::path outpath) {
     bool writeFile = !outpath.empty();
     // If trim is on, process spins before rleDs so they can be trimmed later, otherwise process them after
     if (options.encode && options.trim) {
-        writeFile += processType(file, "spïn");
+        writeFile |= processType(file, "spïn");
     }
     writeFile |= processType(file, "rlëD");
     if (options.encode && !options.trim) {
@@ -350,7 +350,7 @@ bool processFile(std::filesystem::path path, std::filesystem::path outpath) {
             format = rsrc::file::format::classic;
         }
     }
-    file.write(outpath, format);
+    file.write(outpath.generic_string(), format);
     return true;
 }
 
