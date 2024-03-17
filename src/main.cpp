@@ -87,11 +87,11 @@ int64_t processRle(std::shared_ptr<rsrc::resource> resource) {
         int blank = 0;
         while (true) {
             op = reader.read_long();
-            if (skip-- > 0) {
-                continue;
-            }
             opcode = static_cast<rleop>(op >> 24);
             if (opcode == line_start) {
+                if (skip-- > 0) {
+                    continue;
+                }
                 count = op & 0x00FFFFFF;
                 if (count != 0) {
                     for (int j=0; j<blank; j++) {
