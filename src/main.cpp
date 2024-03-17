@@ -280,7 +280,7 @@ bool processType(rsrc::file& file, std::string typeCode) {
             try {
                 saved += processRle(resource);
             } catch (const std::exception& e) {
-                std::cerr << e.what() << std::endl;
+                std::cerr << typeCode << " " << resource->id() << ": " << e.what() << std::endl;
             }
         }
         std::cout << "Saved " << saved << " bytes from " << typeList->count() << " rlëDs." << std::endl;
@@ -292,7 +292,7 @@ bool processType(rsrc::file& file, std::string typeCode) {
             try {
                 saved += processPict(resource);
             } catch (const std::exception& e) {
-                std::cerr << e.what() << std::endl;
+                std::cerr << typeCode << " " << resource->id() << ": " << e.what() << std::endl;
             }
         }
         std::cout << "Saved " << saved << " bytes from " << typeList->count() << " PICTs." << std::endl;
@@ -304,7 +304,7 @@ bool processType(rsrc::file& file, std::string typeCode) {
             try {
                 saved += processSpin(resource, file);
             } catch (const std::exception& e) {
-                std::cerr << e.what() << std::endl;
+                std::cerr << typeCode << " " << resource->id() << ": " << e.what() << std::endl;
             }
         }
         std::cout << "Encoded " << saved << " rlëDs from " << typeList->count() << " spïns." << std::endl;
