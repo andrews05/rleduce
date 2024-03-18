@@ -5,6 +5,7 @@
 //  Created by Andrew Simmonds on 19/05/21.
 //
 
+#include <algorithm>
 #include <filesystem>
 #include <iostream>
 #include "libGraphite/data/reader.hpp"
