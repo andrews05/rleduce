@@ -31,6 +31,95 @@ enum rleop: uint8_t {
     pixel_run = 0x04,
 };
 
+typedef struct Spin {
+    int16_t spriteID;
+    int16_t maskID;
+    int16_t frameX;
+    int16_t frameY;
+    int16_t gridX;
+    int16_t gridY;
+
+    Spin(std::shared_ptr<rsrc::resource> resource) {
+        auto reader = data::reader(resource->data());
+        spriteID = reader.read_short();
+        maskID = reader.read_short();
+        frameX = reader.read_short();
+        frameY = reader.read_short();
+        gridX = reader.read_short();
+        gridY = reader.read_short();
+    }
+} Spin;
+
+typedef struct Shan {
+    int16_t baseSpriteID;
+    int16_t baseMaskID;
+    int16_t baseSetCount;
+    int16_t baseFrameX;
+    int16_t baseFrameY;
+    int16_t altSpriteID;
+    int16_t altMaskID;
+    int16_t altSetCount;
+    int16_t altFrameX;
+    int16_t altFrameY;
+    int16_t engineSpriteID;
+    int16_t engineMaskID;
+    int16_t engineFrameX;
+    int16_t engineFrameY;
+    int16_t lightSpriteID;
+    int16_t lightMaskID;
+    int16_t lightFrameX;
+    int16_t lightFrameY;
+    int16_t weaponSpriteID;
+    int16_t weaponMaskID;
+    int16_t weaponFrameX;
+    int16_t weaponFrameY;
+    int16_t framesPer;
+    int16_t shieldSpriteID;
+    int16_t shieldMaskID;
+    int16_t shieldFrameX;
+    int16_t shieldFrameY;
+
+    Shan(std::shared_ptr<rsrc::resource> resource) {
+        auto reader = data::reader(resource->data());
+        baseSpriteID = reader.read_short();
+        baseMaskID = reader.read_short();
+        baseSetCount = reader.read_short();
+        baseFrameX = reader.read_short();
+        baseFrameY = reader.read_short();
+        reader.move(2);
+
+        altSpriteID = reader.read_short();
+        altMaskID = reader.read_short();
+        altSetCount = reader.read_short();
+        altFrameX = reader.read_short();
+        altFrameY = reader.read_short();
+
+        engineSpriteID = reader.read_short();
+        engineMaskID = reader.read_short();
+        engineFrameX = reader.read_short();
+        engineFrameY = reader.read_short();
+
+        lightSpriteID = reader.read_short();
+        lightMaskID = reader.read_short();
+        lightFrameX = reader.read_short();
+        lightFrameY = reader.read_short();
+
+        weaponSpriteID = reader.read_short();
+        weaponMaskID = reader.read_short();
+        weaponFrameX = reader.read_short();
+        weaponFrameY = reader.read_short();
+
+        reader.move(6);
+        framesPer = reader.read_short();
+        reader.move(10);
+
+        shieldSpriteID = reader.read_short();
+        shieldMaskID = reader.read_short();
+        shieldFrameX = reader.read_short();
+        shieldFrameY = reader.read_short();
+    }
+} Shan;
+
 int64_t processRle(std::shared_ptr<rsrc::resource> resource) {
     auto reader = data::reader(resource->data());
     auto width = reader.read_short();
@@ -204,38 +293,38 @@ int64_t processPict(std::shared_ptr<rsrc::resource> resource) {
     return 0;
 }
 
-bool processSpin(std::shared_ptr<rsrc::resource> resource, rsrc::file& file) {
-    auto reader = data::reader(resource->data());
-    auto spriteID = reader.read_short();
-    auto maskID = reader.read_short();
-    auto frameX = reader.read_short();
-    auto frameY = reader.read_short();
-    auto gridX = reader.read_short();
-    auto gridY = reader.read_short();
-    if (frameX <= 0 || frameY <= 0 || gridX <= 0 || gridY <= 0) {
-        std::cerr << "Invalid spïn resource: " << resource->id() << std::endl;
+bool enRle(std::shared_ptr<rsrc::resource> resource, rsrc::file& file, int16_t spriteID, int16_t maskID, int16_t frameX, int16_t frameY) {
+    auto rleD = file.find("rlëD", spriteID, {});
+    if (!rleD.expired()) {
         return false;
     }
-    
+
     auto spriteRes = file.find("PICT", spriteID, {}).lock();
     auto maskRes = file.find("PICT", maskID, {}).lock();
     if (spriteRes == nullptr || maskRes == nullptr) {
         return false;
     }
-    
+
+    if (frameX <= 0 || frameY <= 0) {
+        std::cerr << "Invalid frame size in " << resource->type_code() << " " << resource->id() << "." << std::endl;
+        return false;
+    }
+
     auto spritePict = qd::pict(spriteRes->data());
     auto sprite = spritePict.image_surface().lock();
-    if (sprite->size().width() != frameX * gridX || sprite->size().height() != frameY * gridY) {
-        std::cerr << "Sprite PICT " << spriteID << " for spïn " << resource->id() << " does not match grid size." << std::endl;
+    if (sprite->size().width() % frameX != 0 || sprite->size().height() % frameY != 0) {
+        std::cerr << "Sprite PICT " << spriteID << " for " << resource->type_code() << " " << resource->id() << " does not match frame size." << std::endl;
         return false;
     }
     auto maskPict = qd::pict(maskRes->data());
     auto mask = maskPict.image_surface().lock();
-    if (mask->size().width() != frameX * gridX || mask->size().height() != frameY * gridY) {
-        std::cerr << "Mask PICT " << maskID << " for spïn " << resource->id() << " does not match grid size." << std::endl;
+    if (mask->size().width() != sprite->size().width() || mask->size().height() != sprite->size().height()) {
+        std::cerr << "Mask PICT " << maskID << " for " << resource->type_code() << " " << resource->id() << " does not match sprite size." << std::endl;
         return false;
     }
-    
+
+    auto gridX = sprite->size().width() / frameX;
+    auto gridY = sprite->size().height() / frameY;
     auto rle = qd::rle(qd::size(frameX, frameY), gridX * gridY);
     if (options.dither && spritePict.format() != 16) {
         rgb555dither(sprite);
@@ -254,7 +343,7 @@ bool processSpin(std::shared_ptr<rsrc::resource> resource, rsrc::file& file) {
             rle.write_frame(gy * gridX + gx, frame);
         }
     }
-    
+
     auto data = rle.data();
     if (options.verbose) {
         auto sSize = spriteRes->data()->size();
@@ -262,9 +351,26 @@ bool processSpin(std::shared_ptr<rsrc::resource> resource, rsrc::file& file) {
         printf("%7lld  %7d  %6d  %6d  %6d  %11ld  %9ld  %9ld\n",
                resource->id(), spriteID, rle.frame_count(), frameX, frameY, sSize, mSize, data->size());
     }
-    file.add_resource("rlëD", spriteID, resource->name(), data);
+    file.add_resource("rlëD", spriteID, spriteRes->name(), data);
     // TODO: Remove PICTs - no such function currently available
     return true;
+}
+
+bool processSpin(std::shared_ptr<rsrc::resource> resource, rsrc::file& file) {
+    auto spin = Spin(resource);
+    return enRle(resource, file, spin.spriteID, spin.maskID, spin.frameX, spin.frameY);
+}
+
+int processShan(std::shared_ptr<rsrc::resource> resource, rsrc::file& file) {
+    auto shan = Shan(resource);
+    int encoded = 0;
+    encoded += enRle(resource, file, shan.baseSpriteID, shan.baseMaskID, shan.baseFrameX, shan.baseFrameY);
+    encoded += enRle(resource, file, shan.altSpriteID, shan.altMaskID, shan.altFrameX, shan.altFrameY);
+    encoded += enRle(resource, file, shan.engineSpriteID, shan.engineMaskID, shan.engineFrameX, shan.engineFrameY);
+    encoded += enRle(resource, file, shan.lightSpriteID, shan.lightMaskID, shan.lightFrameX, shan.lightFrameY);
+    encoded += enRle(resource, file, shan.weaponSpriteID, shan.weaponMaskID, shan.weaponFrameX, shan.weaponFrameY);
+    encoded += enRle(resource, file, shan.shieldSpriteID, shan.shieldMaskID, shan.shieldFrameX, shan.shieldFrameY);
+    return encoded;
 }
 
 bool processType(rsrc::file& file, std::string typeCode) {
@@ -309,6 +415,18 @@ bool processType(rsrc::file& file, std::string typeCode) {
             }
         }
         std::cout << "Encoded " << saved << " rlëDs from " << typeList->count() << " spïns." << std::endl;
+    } else if (typeCode == "shän") {
+        if (options.verbose) {
+            printf("shän ID  rlëD ID  Frames   Width  Height  Sprite Size  Mask Size  rlëD Size\n");
+        }
+        for (auto resource : typeList->resources()) {
+            try {
+                saved += processShan(resource, file);
+            } catch (const std::exception& e) {
+                std::cerr << typeCode << " " << resource->id() << ": " << e.what() << std::endl;
+            }
+        }
+        std::cout << "Encoded " << saved << " rlëDs from " << typeList->count() << " shäns." << std::endl;
     }
     return saved != 0;
 }
@@ -329,10 +447,12 @@ bool processFile(std::filesystem::path path, std::filesystem::path outpath) {
     // If trim is on, process spins before rleDs so they can be trimmed later, otherwise process them after
     if (options.encode && options.trim) {
         writeFile |= processType(file, "spïn");
+        writeFile |= processType(file, "shän");
     }
     writeFile |= processType(file, "rlëD");
     if (options.encode && !options.trim) {
         writeFile |= processType(file, "spïn");
+        writeFile |= processType(file, "shän");
     }
     writeFile |= processType(file, "PICT");
     if (!writeFile) {
@@ -359,7 +479,7 @@ void printUsage() {
     std::cerr << "Usage: rleduce [options] file ..." << std::endl;
     std::cerr << "  -t --trim           allow rlëD frame height trimming (marginally smaller output)" << std::endl;
     std::cerr << "  -r --reduce         reduce PICT depth to 16-bit (smaller output)" << std::endl;
-    std::cerr << "  -e --encode         encode rlëDs from spïns with PICTs" << std::endl;
+    std::cerr << "  -e --encode         encode rlëDs from spïns/shäns with PICTs" << std::endl;
     std::cerr << "  -n --no-dither      don't dither when reducing to 16-bit (applies to -r and -e)" << std::endl;
     std::cerr << "  -o --output <path>  set output file/directory" << std::endl;
     std::cerr << "  -v --verbose        enable verbose output" << std::endl;
