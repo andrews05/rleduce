@@ -17,6 +17,7 @@ using namespace graphite;
 
 static struct options {
     bool trim = false;
+    bool picts = false;
     bool reduce = false;
     bool encode = false;
     bool dither = true;
@@ -444,7 +445,7 @@ bool processFile(std::filesystem::path path, std::filesystem::path outpath) {
     std::cout << "Processing " << filename << "..." << std::endl;
     // Don't rewrite file if nothing changed and outpath not provided
     bool writeFile = !outpath.empty();
-    // If trim is on, process spins before rleDs so they can be trimmed later, otherwise process them after
+    // If trim is on, do encodes before processing rleDs so they can also be trimmed, otherwise encode after
     if (options.encode && options.trim) {
         writeFile |= processType(file, "spïn");
         writeFile |= processType(file, "shän");
@@ -454,7 +455,9 @@ bool processFile(std::filesystem::path path, std::filesystem::path outpath) {
         writeFile |= processType(file, "spïn");
         writeFile |= processType(file, "shän");
     }
-    writeFile |= processType(file, "PICT");
+    if (options.picts) {
+        writeFile |= processType(file, "PICT");
+    }
     if (!writeFile) {
         std::cout << "No changes written." << std::endl;
         return false;
@@ -477,23 +480,27 @@ bool processFile(std::filesystem::path path, std::filesystem::path outpath) {
 
 void printUsage() {
     std::cerr << "Usage: rleduce [options] file ..." << std::endl;
-    std::cerr << "  -t --trim           allow rlëD frame height trimming (marginally smaller output)" << std::endl;
+    std::cerr << "  -p --picts          normalize PICTs by rewriting them in a standard format" << std::endl;
     std::cerr << "  -r --reduce         reduce PICT depth to 16-bit (smaller output)" << std::endl;
     std::cerr << "  -e --encode         encode rlëDs from spïns/shäns with PICTs" << std::endl;
     std::cerr << "  -n --no-dither      don't dither when reducing to 16-bit (applies to -r and -e)" << std::endl;
+    std::cerr << "  -t --trim           allow rlëD frame height trimming (not recommended)" << std::endl;
     std::cerr << "  -o --output <path>  set output file/directory" << std::endl;
     std::cerr << "  -v --verbose        enable verbose output" << std::endl;
 }
 
 void processOption(std::string arg) {
-    if (arg == "t" || arg == "--trim") {
-        options.trim = true;
+    if (arg == "p" || arg == "--picts") {
+        options.picts = true;
     } else if (arg == "r" || arg == "--reduce") {
+        options.picts = true;
         options.reduce = true;
     } else if (arg == "e" || arg == "--encode") {
         options.encode = true;
     } else if (arg == "n" || arg == "--no-dither") {
         options.dither = false;
+    } else if (arg == "t" || arg == "--trim") {
+        options.trim = true;
     } else if (arg == "v" || arg == "--verbose") {
         options.verbose = true;
     } else {
