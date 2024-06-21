@@ -20,6 +20,7 @@ static struct options {
     bool picts = false;
     bool reduce = false;
     bool encode = false;
+    bool decode = false;
     bool dither = true;
     bool verbose = false;
 } options;
@@ -259,7 +260,8 @@ int64_t processPict(std::shared_ptr<rsrc::resource> resource) {
         rgb555dither(pict.image_surface().lock());
     }
     auto size = resource->data()->size();
-    auto data = pict.data(options.reduce || format == 16);
+    auto maxDepth = options.reduce || format == 16 ? 16 : 24;
+    auto data = pict.data(maxDepth);
     int64_t diff = size - data->size();
     // Force write if format is non-standard (QuickTime) or reduction occurred
     bool save = diff > 0 || format > 32 || (options.reduce && format != 16);
@@ -303,7 +305,7 @@ bool enRle(std::shared_ptr<rsrc::resource> resource, rsrc::file& file, int16_t s
     }
     auto maskPict = qd::pict(maskRes->data());
     auto mask = maskPict.image_surface().lock();
-    if (mask->size().width() != spriteX || mask->size().height() != spriteY) {
+    if (!(mask->size() == sprite->size())) {
         std::cerr << "Mask PICT " << maskID << " for " << resource->type_code() << " " << resource->id() << " does not match sprite size." << std::endl;
         return false;
     }
@@ -327,8 +329,9 @@ bool enRle(std::shared_ptr<rsrc::resource> resource, rsrc::file& file, int16_t s
     if (options.verbose) {
         auto sSize = spriteRes->data()->size();
         auto mSize = maskRes->data()->size();
+        auto rSize = data->size();
         printf("%7lld  %7d  %6d  %6d  %6d  %11ld  %9ld  %9ld\n",
-               resource->id(), spriteID, rle.frame_count(), frame.width(), frame.height(), sSize, mSize, data->size());
+               resource->id(), spriteID, rle.frame_count(), frame.width(), frame.height(), sSize, mSize, rSize);
     }
     file.add_resource("rlëD", spriteID, spriteRes->name(), data);
 
@@ -339,21 +342,98 @@ bool enRle(std::shared_ptr<rsrc::resource> resource, rsrc::file& file, int16_t s
     return true;
 }
 
+bool deRle(std::shared_ptr<rsrc::resource> resource, rsrc::file& file, int16_t spriteID, int16_t maskID, qd::size frame, int16_t gridX) {
+    if (spriteID <= 0 || maskID <= 0) {
+        return false;
+    }
+    auto rleRes = file.find("rlëD", spriteID, {}).lock();
+    if (rleRes == nullptr) {
+        return false;
+    }
+    if (gridX <= 0) {
+        std::cerr << "Invalid grid size in " << resource->type_code() << " " << resource->id() << "." << std::endl;
+    }
+
+    auto rle = qd::rle(rleRes->data(), 0, "", gridX);
+    if (!(frame == rle.frame_size())) {
+        std::cerr << "rlëD " << spriteID << " for " << resource->type_code() << " " << resource->id() << " does not match frame size." << std::endl;
+        return false;
+    }
+
+    // Separate the mask
+    auto sprite = rle.surface().lock();
+    auto spriteX = sprite->size().width();
+    auto spriteY = sprite->size().height();
+    auto black = qd::color::black();
+    auto white = qd::color::white();
+    auto mask = std::make_shared<qd::surface>(spriteX, spriteY, black);
+    for (int y=0; y<spriteY; y++) {
+        for (int x=0; x<spriteX; x++) {
+            if (sprite->at(x, y).alpha_component() == 0) {
+                sprite->set(x, y, black);
+            } else {
+                mask->set(x, y, white);
+            }
+        }
+    }
+
+    auto spritePict = qd::pict(sprite);
+    auto spriteData = spritePict.data(16);
+    auto maskPict = qd::pict(mask);
+    auto maskData = maskPict.data(1);
+    if (options.verbose) {
+        auto sSize = spriteData->size();
+        auto mSize = maskData->size();
+        auto rSize = rleRes->data()->size();
+        printf("%7lld  %7d  %6d  %6d  %6d  %11ld  %9ld  %9ld\n",
+               resource->id(), spriteID, rle.frame_count(), frame.width(), frame.height(), sSize, mSize, rSize);
+    }
+    file.add_resource("PICT", spriteID, rleRes->name(), spriteData);
+    file.add_resource("PICT", maskID, "", maskData);
+
+    // Remove the rleD
+    rleRes->remove();
+
+    return true;
+}
+
 bool processSpin(std::shared_ptr<rsrc::resource> resource, rsrc::file& file) {
     auto spin = Spin(resource);
-    return enRle(resource, file, spin.spriteID, spin.maskID, spin.frame);
+    if (options.encode) {
+        return enRle(resource, file, spin.spriteID, spin.maskID, spin.frame);
+    } else {
+        return deRle(resource, file, spin.spriteID, spin.maskID, spin.frame, spin.grid.width());
+    }
 }
 
 int processShan(std::shared_ptr<rsrc::resource> resource, rsrc::file& file) {
     auto shan = Shan(resource);
-    int encoded = 0;
-    encoded += enRle(resource, file, shan.baseSpriteID, shan.baseMaskID, shan.baseFrame);
-    encoded += enRle(resource, file, shan.altSpriteID, shan.altMaskID, shan.altFrame);
-    encoded += enRle(resource, file, shan.engineSpriteID, shan.engineMaskID, shan.engineFrame);
-    encoded += enRle(resource, file, shan.lightSpriteID, shan.lightMaskID, shan.lightFrame);
-    encoded += enRle(resource, file, shan.weaponSpriteID, shan.weaponMaskID, shan.weaponFrame);
-    encoded += enRle(resource, file, shan.shieldSpriteID, shan.shieldMaskID, shan.shieldFrame);
-    return encoded;
+    int processed = 0;
+    if (options.encode) {
+        processed += enRle(resource, file, shan.baseSpriteID, shan.baseMaskID, shan.baseFrame);
+        processed += enRle(resource, file, shan.altSpriteID, shan.altMaskID, shan.altFrame);
+        processed += enRle(resource, file, shan.engineSpriteID, shan.engineMaskID, shan.engineFrame);
+        processed += enRle(resource, file, shan.lightSpriteID, shan.lightMaskID, shan.lightFrame);
+        processed += enRle(resource, file, shan.weaponSpriteID, shan.weaponMaskID, shan.weaponFrame);
+        processed += enRle(resource, file, shan.shieldSpriteID, shan.shieldMaskID, shan.shieldFrame);
+    } else {
+        // Work out a suitable grid width
+        int16_t gridX = 6;
+        if (shan.framesPer <= gridX) {
+            gridX = shan.framesPer;
+        } else {
+            while (shan.framesPer % gridX != 0) {
+                gridX += 1;
+            }
+        }
+        processed += deRle(resource, file, shan.baseSpriteID, shan.baseMaskID, shan.baseFrame, gridX);
+        processed += deRle(resource, file, shan.altSpriteID, shan.altMaskID, shan.altFrame, gridX);
+        processed += deRle(resource, file, shan.engineSpriteID, shan.engineMaskID, shan.engineFrame, gridX);
+        processed += deRle(resource, file, shan.lightSpriteID, shan.lightMaskID, shan.lightFrame, gridX);
+        processed += deRle(resource, file, shan.weaponSpriteID, shan.weaponMaskID, shan.weaponFrame, gridX);
+        processed += deRle(resource, file, shan.shieldSpriteID, shan.shieldMaskID, shan.shieldFrame, gridX);
+    }
+    return processed;
 }
 
 bool processType(rsrc::file& file, std::string typeCode) {
@@ -397,7 +477,8 @@ bool processType(rsrc::file& file, std::string typeCode) {
                 std::cerr << typeCode << " " << resource->id() << ": " << e.what() << std::endl;
             }
         }
-        std::cout << "Encoded " << saved << " rlëDs from " << typeList->count() << " spïns." << std::endl;
+        auto action = options.decode ? "Decoded" : "Encoded";
+        std::cout << action << " " << saved << " rlëDs from " << typeList->count() << " spïns." << std::endl;
     } else if (typeCode == "shän") {
         if (options.verbose) {
             printf("shän ID  rlëD ID  Frames   Width  Height  Sprite Size  Mask Size  rlëD Size\n");
@@ -409,7 +490,8 @@ bool processType(rsrc::file& file, std::string typeCode) {
                 std::cerr << typeCode << " " << resource->id() << ": " << e.what() << std::endl;
             }
         }
-        std::cout << "Encoded " << saved << " rlëDs from " << typeList->count() << " shäns." << std::endl;
+        auto action = options.decode ? "Decoded" : "Encoded";
+        std::cout << action << " " << saved << " rlëDs from " << typeList->count() << " shäns." << std::endl;
     }
     return saved != 0;
 }
@@ -427,8 +509,12 @@ bool processFile(std::filesystem::path path, std::filesystem::path outpath) {
     std::cout << "Processing " << filename << "..." << std::endl;
     // Don't rewrite file if nothing changed and outpath not provided
     bool writeFile = !outpath.empty();
+    // Process picts first if decoding rleDs, otherwise last
+    if (options.picts && options.decode) {
+        writeFile |= processType(file, "PICT");
+    }
     // If trim is on, do encodes before processing rleDs so they can also be trimmed, otherwise encode after
-    if (options.encode && options.trim) {
+    if (options.decode || (options.encode && options.trim)) {
         writeFile |= processType(file, "spïn");
         writeFile |= processType(file, "shän");
     }
@@ -437,7 +523,7 @@ bool processFile(std::filesystem::path path, std::filesystem::path outpath) {
         writeFile |= processType(file, "spïn");
         writeFile |= processType(file, "shän");
     }
-    if (options.picts) {
+    if (options.picts && !options.decode) {
         writeFile |= processType(file, "PICT");
     }
     if (!writeFile) {
@@ -465,6 +551,7 @@ void printUsage() {
     std::cerr << "  -p --picts          normalize PICTs by rewriting them in a standard format" << std::endl;
     std::cerr << "  -r --reduce         reduce PICT depth to 16-bit (smaller output)" << std::endl;
     std::cerr << "  -e --encode         encode rlëDs from spïns/shäns with PICTs" << std::endl;
+    std::cerr << "  -d --decode         decode rlëDs from spïns/shäns into PICTs" << std::endl;
     std::cerr << "  -n --no-dither      don't dither when reducing to 16-bit (applies to -r and -e)" << std::endl;
     std::cerr << "  -t --trim           allow rlëD frame height trimming (not recommended)" << std::endl;
     std::cerr << "  -o --output <path>  set output file/directory" << std::endl;
@@ -479,6 +566,8 @@ void processOption(std::string arg) {
         options.reduce = true;
     } else if (arg == "e" || arg == "--encode") {
         options.encode = true;
+    } else if (arg == "d" || arg == "--decode") {
+        options.decode = true;
     } else if (arg == "n" || arg == "--no-dither") {
         options.dither = false;
     } else if (arg == "t" || arg == "--trim") {
