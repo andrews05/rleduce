@@ -35,19 +35,15 @@ enum rleop: uint8_t {
 typedef struct Spin {
     int16_t spriteID;
     int16_t maskID;
-    int16_t frameX;
-    int16_t frameY;
-    int16_t gridX;
-    int16_t gridY;
+    qd::size frame;
+    qd::size grid;
 
     Spin(std::shared_ptr<rsrc::resource> resource) {
         auto reader = data::reader(resource->data());
         spriteID = reader.read_short();
         maskID = reader.read_short();
-        frameX = reader.read_short();
-        frameY = reader.read_short();
-        gridX = reader.read_short();
-        gridY = reader.read_short();
+        frame = qd::size::read(reader, qd::size::pict);
+        grid = qd::size::read(reader, qd::size::pict);
     }
 } Spin;
 
@@ -55,60 +51,49 @@ typedef struct Shan {
     int16_t baseSpriteID;
     int16_t baseMaskID;
     int16_t baseSetCount;
-    int16_t baseFrameX;
-    int16_t baseFrameY;
+    qd::size baseFrame;
     int16_t altSpriteID;
     int16_t altMaskID;
     int16_t altSetCount;
-    int16_t altFrameX;
-    int16_t altFrameY;
+    qd::size altFrame;
     int16_t engineSpriteID;
     int16_t engineMaskID;
-    int16_t engineFrameX;
-    int16_t engineFrameY;
+    qd::size engineFrame;
     int16_t lightSpriteID;
     int16_t lightMaskID;
-    int16_t lightFrameX;
-    int16_t lightFrameY;
+    qd::size lightFrame;
     int16_t weaponSpriteID;
     int16_t weaponMaskID;
-    int16_t weaponFrameX;
-    int16_t weaponFrameY;
+    qd::size weaponFrame;
     int16_t framesPer;
     int16_t shieldSpriteID;
     int16_t shieldMaskID;
-    int16_t shieldFrameX;
-    int16_t shieldFrameY;
+    qd::size shieldFrame;
 
     Shan(std::shared_ptr<rsrc::resource> resource) {
         auto reader = data::reader(resource->data());
         baseSpriteID = reader.read_short();
         baseMaskID = reader.read_short();
         baseSetCount = reader.read_short();
-        baseFrameX = reader.read_short();
-        baseFrameY = reader.read_short();
+        baseFrame = qd::size::read(reader, qd::size::pict);
         reader.move(2);
 
         altSpriteID = reader.read_short();
         altMaskID = reader.read_short();
         altSetCount = reader.read_short();
-        altFrameX = reader.read_short();
-        altFrameY = reader.read_short();
+        altFrame = qd::size::read(reader, qd::size::pict);
 
         engineSpriteID = reader.read_short();
         engineMaskID = reader.read_short();
-        engineFrameX = reader.read_short();
-        engineFrameY = reader.read_short();
+        engineFrame = qd::size::read(reader, qd::size::pict);
 
         lightSpriteID = reader.read_short();
         lightMaskID = reader.read_short();
-        lightFrameX = reader.read_short();
-        lightFrameY = reader.read_short();
+        lightFrame = qd::size::read(reader, qd::size::pict);
 
         weaponSpriteID = reader.read_short();
         weaponMaskID = reader.read_short();
-        weaponFrameX = reader.read_short();
-        weaponFrameY = reader.read_short();
+        weaponFrame = qd::size::read(reader, qd::size::pict);
 
         reader.move(6);
         framesPer = reader.read_short();
@@ -116,8 +101,7 @@ typedef struct Shan {
 
         shieldSpriteID = reader.read_short();
         shieldMaskID = reader.read_short();
-        shieldFrameX = reader.read_short();
-        shieldFrameY = reader.read_short();
+        shieldFrame = qd::size::read(reader, qd::size::pict);
     }
 } Shan;
 
@@ -294,83 +278,81 @@ int64_t processPict(std::shared_ptr<rsrc::resource> resource) {
     return 0;
 }
 
-bool enRle(std::shared_ptr<rsrc::resource> resource, rsrc::file& file, int16_t spriteID, int16_t maskID, int16_t frameX, int16_t frameY) {
-    auto rleD = file.find("rlëD", spriteID, {});
-    if (!rleD.expired()) {
+bool enRle(std::shared_ptr<rsrc::resource> resource, rsrc::file& file, int16_t spriteID, int16_t maskID, qd::size frame) {
+    if (spriteID <= 0 || maskID <= 0) {
         return false;
     }
-
     auto spriteRes = file.find("PICT", spriteID, {}).lock();
     auto maskRes = file.find("PICT", maskID, {}).lock();
     if (spriteRes == nullptr || maskRes == nullptr) {
         return false;
     }
 
-    if (frameX <= 0 || frameY <= 0) {
+    if (frame.width() <= 0 || frame.height() <= 0) {
         std::cerr << "Invalid frame size in " << resource->type_code() << " " << resource->id() << "." << std::endl;
         return false;
     }
 
     auto spritePict = qd::pict(spriteRes->data());
     auto sprite = spritePict.image_surface().lock();
-    if (sprite->size().width() % frameX != 0 || sprite->size().height() % frameY != 0) {
+    auto spriteX = sprite->size().width();
+    auto spriteY = sprite->size().height();
+    if (spriteX % frame.width() != 0 || spriteY % frame.height() != 0) {
         std::cerr << "Sprite PICT " << spriteID << " for " << resource->type_code() << " " << resource->id() << " does not match frame size." << std::endl;
         return false;
     }
     auto maskPict = qd::pict(maskRes->data());
     auto mask = maskPict.image_surface().lock();
-    if (mask->size().width() != sprite->size().width() || mask->size().height() != sprite->size().height()) {
+    if (mask->size().width() != spriteX || mask->size().height() != spriteY) {
         std::cerr << "Mask PICT " << maskID << " for " << resource->type_code() << " " << resource->id() << " does not match sprite size." << std::endl;
         return false;
     }
 
-    auto gridX = sprite->size().width() / frameX;
-    auto gridY = sprite->size().height() / frameY;
-    auto rle = qd::rle(qd::size(frameX, frameY), gridX * gridY);
     if (options.dither && spritePict.format() != 16) {
         rgb555dither(sprite);
     }
-    for (int gy=0; gy<gridY; gy++) {
-        for (int gx=0; gx<gridX; gx++) {
-            auto frame = std::make_shared<qd::surface>(qd::surface(frameX, frameY));
-            for (int fy=0; fy<frameY; fy++) {
-                for (int fx=0; fx<frameX; fx++) {
-                    auto maskPixel = mask->at(gx * frameX + fx, gy * frameY + fy);
-                    if (maskPixel.red_component() || maskPixel.green_component() || maskPixel.blue_component()) {
-                        frame->set(fx, fy, sprite->at(gx * frameX + fx, gy * frameY + fy));
-                    }
-                }
+
+    // Apply the mask
+    auto black = qd::color::black();
+    for (int y=0; y<spriteY; y++) {
+        for (int x=0; x<spriteX; x++) {
+            if (mask->at(x, y) == black) {
+                sprite->set(x, y, {0, 0, 0, 0});
             }
-            rle.write_frame(gy * gridX + gx, frame);
         }
     }
 
+    auto rle = qd::rle(sprite, frame);
     auto data = rle.data();
     if (options.verbose) {
         auto sSize = spriteRes->data()->size();
         auto mSize = maskRes->data()->size();
         printf("%7lld  %7d  %6d  %6d  %6d  %11ld  %9ld  %9ld\n",
-               resource->id(), spriteID, rle.frame_count(), frameX, frameY, sSize, mSize, data->size());
+               resource->id(), spriteID, rle.frame_count(), frame.width(), frame.height(), sSize, mSize, data->size());
     }
     file.add_resource("rlëD", spriteID, spriteRes->name(), data);
-    // TODO: Remove PICTs - no such function currently available
+
+    // Remove the PICTs
+    spriteRes->remove();
+    maskRes->remove();
+
     return true;
 }
 
 bool processSpin(std::shared_ptr<rsrc::resource> resource, rsrc::file& file) {
     auto spin = Spin(resource);
-    return enRle(resource, file, spin.spriteID, spin.maskID, spin.frameX, spin.frameY);
+    return enRle(resource, file, spin.spriteID, spin.maskID, spin.frame);
 }
 
 int processShan(std::shared_ptr<rsrc::resource> resource, rsrc::file& file) {
     auto shan = Shan(resource);
     int encoded = 0;
-    encoded += enRle(resource, file, shan.baseSpriteID, shan.baseMaskID, shan.baseFrameX, shan.baseFrameY);
-    encoded += enRle(resource, file, shan.altSpriteID, shan.altMaskID, shan.altFrameX, shan.altFrameY);
-    encoded += enRle(resource, file, shan.engineSpriteID, shan.engineMaskID, shan.engineFrameX, shan.engineFrameY);
-    encoded += enRle(resource, file, shan.lightSpriteID, shan.lightMaskID, shan.lightFrameX, shan.lightFrameY);
-    encoded += enRle(resource, file, shan.weaponSpriteID, shan.weaponMaskID, shan.weaponFrameX, shan.weaponFrameY);
-    encoded += enRle(resource, file, shan.shieldSpriteID, shan.shieldMaskID, shan.shieldFrameX, shan.shieldFrameY);
+    encoded += enRle(resource, file, shan.baseSpriteID, shan.baseMaskID, shan.baseFrame);
+    encoded += enRle(resource, file, shan.altSpriteID, shan.altMaskID, shan.altFrame);
+    encoded += enRle(resource, file, shan.engineSpriteID, shan.engineMaskID, shan.engineFrame);
+    encoded += enRle(resource, file, shan.lightSpriteID, shan.lightMaskID, shan.lightFrame);
+    encoded += enRle(resource, file, shan.weaponSpriteID, shan.weaponMaskID, shan.weaponFrame);
+    encoded += enRle(resource, file, shan.shieldSpriteID, shan.shieldMaskID, shan.shieldFrame);
     return encoded;
 }
 
