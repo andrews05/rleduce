@@ -16,6 +16,7 @@
 using namespace graphite;
 
 static struct options {
+    bool condense = false;
     bool trim = false;
     bool picts = false;
     bool reduce = false;
@@ -23,6 +24,8 @@ static struct options {
     bool decode = false;
     bool dither = true;
     bool verbose = false;
+    bool forceFormat = false;
+    rsrc::file::format format;
 } options;
 
 enum rleop: uint8_t {
@@ -518,7 +521,9 @@ bool processFile(std::filesystem::path path, std::filesystem::path outpath) {
         writeFile |= processType(file, "spïn");
         writeFile |= processType(file, "shän");
     }
-    writeFile |= processType(file, "rlëD");
+    if (options.condense) {
+        writeFile |= processType(file, "rlëD");
+    }
     if (options.encode && !options.trim) {
         writeFile |= processType(file, "spïn");
         writeFile |= processType(file, "shän");
@@ -531,10 +536,11 @@ bool processFile(std::filesystem::path path, std::filesystem::path outpath) {
         return false;
     }
     
-    auto format = file.current_format();
+    auto format = options.forceFormat ? options.format : file.current_format();
     if (outpath.empty()) {
         outpath = path;
-    } else {
+    } else if (!options.forceFormat) {
+        // Determine format from extension
         auto ext = outpath.extension();
         if (ext == ".rez") {
             format = rsrc::file::format::rez;
@@ -548,6 +554,7 @@ bool processFile(std::filesystem::path path, std::filesystem::path outpath) {
 
 void printUsage() {
     std::cerr << "Usage: rleduce [options] file ..." << std::endl;
+    std::cerr << "  -c --condense       optimize rlëDs (default if no options specified)" << std::endl;
     std::cerr << "  -p --picts          normalize PICTs by rewriting them in a standard format" << std::endl;
     std::cerr << "  -r --reduce         reduce PICT depth to 16-bit (smaller output)" << std::endl;
     std::cerr << "  -e --encode         encode rlëDs from spïns/shäns with PICTs" << std::endl;
@@ -556,10 +563,14 @@ void printUsage() {
     std::cerr << "  -t --trim           allow rlëD frame height trimming (not recommended)" << std::endl;
     std::cerr << "  -o --output <path>  set output file/directory" << std::endl;
     std::cerr << "  -v --verbose        enable verbose output" << std::endl;
+    std::cerr << "  --rez               force output in .rez format" << std::endl;
+    std::cerr << "  --ndat              force output in .ndat format" << std::endl;
 }
 
 void processOption(std::string arg) {
-    if (arg == "p" || arg == "--picts") {
+    if (arg == "c" || arg == "--condense") {
+        options.condense = true;
+    } else if (arg == "p" || arg == "--picts") {
         options.picts = true;
     } else if (arg == "r" || arg == "--reduce") {
         options.picts = true;
@@ -571,9 +582,16 @@ void processOption(std::string arg) {
     } else if (arg == "n" || arg == "--no-dither") {
         options.dither = false;
     } else if (arg == "t" || arg == "--trim") {
+        options.condense = true;
         options.trim = true;
     } else if (arg == "v" || arg == "--verbose") {
         options.verbose = true;
+    } else if (arg == "--rez") {
+        options.forceFormat = true;
+        options.format = rsrc::file::rez;
+    } else if (arg == "--ndat") {
+        options.forceFormat = true;
+        options.format = rsrc::file::classic;
     } else {
         std::cerr << "Unknown option: " << arg << std::endl;
         printUsage();
@@ -590,6 +608,7 @@ int main(int argc, const char * argv[]) {
     std::vector<std::filesystem::path> files;
     std::filesystem::path outpath;
     bool outdir = false;
+    bool hasOptions = false;
     for (int i=1; i<argc; i++) {
         std::string arg(argv[i]);
         if (arg[0] == '-' && arg.size() > 1) {
@@ -615,6 +634,7 @@ int main(int argc, const char * argv[]) {
                     processOption(arg.substr(j, 1));
                 }
             }
+            hasOptions = true;
         } else {
             files.emplace_back(std::filesystem::path(arg));
         }
@@ -624,8 +644,19 @@ int main(int argc, const char * argv[]) {
         printUsage();
         return 1;
     }
+    if (!hasOptions) {
+        options.condense = true;
+    }
+
+    auto ext = options.format == rsrc::file::classic ? "ndat" : "rez";
     for (auto file : files) {
-        processFile(file, outdir ? outpath / file.filename() : outpath);
+        auto outfile = outdir ? outpath / file.filename() : outpath;
+        if (options.forceFormat && outfile.empty()) {
+            outfile = std::filesystem::path(file).replace_extension(ext);
+        } else if (options.forceFormat && outdir) {
+            outfile.replace_extension(ext);
+        }
+        processFile(file, outfile);
     }
     return 0;
 }
