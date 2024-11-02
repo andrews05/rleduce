@@ -548,7 +548,12 @@ bool processFile(std::filesystem::path path, std::filesystem::path outpath) {
             format = rsrc::file::format::classic;
         }
     }
-    file.write(outpath.generic_string(), format);
+    try {
+        file.write(outpath.generic_string(), format);
+    } catch (const std::exception& e) {
+        std::cerr << filename.generic_string() << ": " << e.what() << std::endl;
+        exit(2);
+    }
     return true;
 }
 
